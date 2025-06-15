@@ -20,8 +20,8 @@ const hcce = utils.readTemplate("", "hcce.yaml");
 const hcceYamlDocuments = YAML.parseAllDocuments(hcce);
 hcceYamlDocuments.forEach((doc, index) => {
   const jsDoc = doc.toJS();
-  if (jsDoc.kind === "Ingress") {
-    if (!jsDoc.metadata.annotations) {
+  if (jsDoc?.kind === "Ingress") {
+    if (!jsDoc?.metadata?.annotations) {
       jsDoc.metadata["annotations"] = {};
     }
     jsDoc.metadata.annotations["haproxy.org/request-redirect"] = `hubs-maintenance-mode.${processedConfig.HUB_DOMAIN}`
@@ -72,10 +72,16 @@ if (!fs.existsSync(dataBackupPath)) {
 
 // get pod names
 let reticulumPodName = execSync(`kubectl get pods -l=app=reticulum -n ${processedConfig.Namespace} --output jsonpath='{.items[0].metadata.name}'`);
-let pgsqlPodName = execSync(`kubectl get pods -l=app=pgsql -n ${processedConfig.Namespace} --output jsonpath='{.items[0].metadata.name}'`);
 // strip out the single quotes that Windows adds in
 reticulumPodName = reticulumPodName.toString().replaceAll("'", "");
-pgsqlPodName = pgsqlPodName.toString().replaceAll("'", "");
+
+let pgsqlPodName = execSync(`kubectl get pods -l=app=pgsql -n ${processedConfig.Namespace} --output jsonpath='{.items[*].metadata.name}'`);
+pgsqlPodName = 'string' === typeof pgsqlPodName ?
+  pgsqlPodName.toString().replaceAll("'", "") :
+  null;
+if (!pgsqlPodName) {
+  console.error("pgsql pod not found");
+}
 
 console.log("");
 console.log("restoring backup");
@@ -88,13 +94,17 @@ fs_object_names.forEach(fs_object_name => {
   execSync(`kubectl cp --retries=-1 ${path.join(reticulumStorageRelativePath, fs_object_name)} ${reticulumPodName}:/storage -c reticulum -n ${processedConfig.Namespace}`);
 });
 
+if (pgsqlPodName) {
 // upload and apply the dump of the pgsql database
 // note: relative paths must be used for kubectl cp on windows due to this bug: https://github.com/kubernetes/kubernetes/issues/101985
-console.log("restoring database");
-execSync(`kubectl cp --retries=-1 ${path.relative(process.cwd(), pgDumpSQLPath)} ${pgsqlPodName}:/root/pg_dump.sql -n ${processedConfig.Namespace}`);
-execSync(`kubectl exec ${pgsqlPodName} -n ${processedConfig.Namespace} -- /bin/psql ${processedConfig.PGRST_DB_URI} -f /root/pg_dump.sql`);
-execSync(`kubectl exec ${pgsqlPodName} -n ${processedConfig.Namespace} -- /bin/rm /root/pg_dump.sql`);
-
+  const pgsqlInputPath = path.relative(process.cwd(), pgDumpSQLPath);
+  console.log(`restoring database from ${pgsqlInputPath}`);
+  execSync(`kubectl cp --retries=-1 ${pgsqlInputPath} ${pgsqlPodName}:/root/pg_dump.sql -n ${processedConfig.Namespace}`);
+  execSync(`kubectl exec ${pgsqlPodName} -n ${processedConfig.Namespace} -- /bin/psql ${processedConfig.PGRST_DB_URI} -f /root/pg_dump.sql`);
+  execSync(`kubectl exec ${pgsqlPodName} -n ${processedConfig.Namespace} -- /bin/rm /root/pg_dump.sql`);
+} else {
+  console.error('not restoring pgsql');
+}
 
 // restart the Hubs instance so it doesn't error out when visited and maintenance mode is no longer applied
 fs.rmSync(path.join(process.cwd(), maintenanceModeHcceFileName));
