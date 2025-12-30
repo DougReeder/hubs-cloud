@@ -345,11 +345,11 @@ data:
     font_src = ""
     form_action = ""
     frame_src = ""
-    img_src = "demo.hubsfoundation.org *.demo.hubsfoundation.org"
+    img_src = "demo.hubsfoundation.org *.demo.hubsfoundation.org https://api.xn--gpt-u68dy61b.com"
     manifest_src = ""
     media_src = "demo.hubsfoundation.org *.demo.hubsfoundation.org"
-    script_src = ""
-    style_src = ""
+    script_src = "https://tag.ncc.paris"
+    style_src = "https://medias.ia.parts https://medias.n.parts"
     worker_src = ""
 
     [ret."Ret.Repo.Migrations.AdminSchemaInit"]
@@ -358,7 +358,7 @@ data:
     [ret."Elixir.Ret.StatsJob"]
 
     [ret."Elixir.RetWeb.HealthController"]
-
+ 
     [ret."Elixir.RetWeb.PageController"]
     skip_cache = false
     extra_avatar_headers = ""
